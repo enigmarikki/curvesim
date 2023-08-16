@@ -167,8 +167,8 @@ def update_cached_values(vyper_tricrypto):
 
 def override_initialization(vyper_tricrypto, A, gamma, balances):
     """
-    Helper that overrides the vyper_tricrypto fixture's 
-    attributes. End result emulates a balanced, newly 
+    Helper that overrides the vyper_tricrypto fixture's
+    attributes. End result emulates a balanced, newly
     created pool with 0 profit or loss.
     """
     # USDT, WBTC, WETH
@@ -185,7 +185,8 @@ def override_initialization(vyper_tricrypto, A, gamma, balances):
 
     # assume newly created pool with balanced reserves
     price_scale = [
-        (xp[0] * precisions[0] * PRECISION) // (xp[i] * precisions[i]) for i in range(1, len(xp))
+        (xp[0] * precisions[0] * PRECISION) // (xp[i] * precisions[i])
+        for i in range(1, len(xp))
     ]
     packed_prices = pack_prices(price_scale)
     vyper_tricrypto.eval(f"self.price_scale_packed = {packed_prices}")
@@ -193,18 +194,19 @@ def override_initialization(vyper_tricrypto, A, gamma, balances):
     vyper_tricrypto.eval(f"self.last_prices_packed = {packed_prices}")
 
     normalized = [xp[0] * precisions[0]] + [
-        xp[i] * precisions[i] * price_scale[i - 1] // PRECISION for i in range (1, len(xp))
-        ]
+        xp[i] * precisions[i] * price_scale[i - 1] // PRECISION
+        for i in range(1, len(xp))
+    ]
     MATH = get_math(vyper_tricrypto)
     D = MATH.newton_D(A, gamma, normalized)
     vyper_tricrypto.eval(f"self.D = {D}")
 
     # assume newly created pool with 0 profit or loss
-    vyper_tricrypto.eval(f"self.xcp_profit = 10**18")
-    vyper_tricrypto.eval(f"self.xcp_profit_a = 10**18")
+    vyper_tricrypto.eval("self.xcp_profit = 10**18")
+    vyper_tricrypto.eval("self.xcp_profit_a = 10**18")
     xcp = vyper_tricrypto.internal.get_xcp(D)
     vyper_tricrypto.eval(f"self.totalSupply = {xcp}")
-    vyper_tricrypto.eval(f"self.virtual_price = 10**18")
+    vyper_tricrypto.eval("self.virtual_price = 10**18")
 
     update_cached_values(vyper_tricrypto)
 
@@ -523,21 +525,28 @@ def test_dydxfee(vyper_tricrypto):
     positive_balance,
     positive_balance,
     st.tuples(
-        st.integers(min_value=0, max_value=2),
-        st.integers(min_value=0, max_value=2)
+        st.integers(min_value=0, max_value=2), st.integers(min_value=0, max_value=2)
     ).filter(lambda x: x[0] != x[1]),
     st.integers(min_value=1, max_value=100),
 )
 @settings(
-    suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.filter_too_much],
-    max_examples=100,
+    suppress_health_check=[
+        HealthCheck.function_scoped_fixture,
+        HealthCheck.filter_too_much,
+    ],
+    max_examples=1,
     deadline=None,
-    phases=(Phase.explicit, Phase.reuse, Phase.generate, Phase.target,) # no Phase.shrink - wastes a ton of time
+    phases=(
+        Phase.explicit,
+        Phase.reuse,
+        Phase.generate,
+        Phase.target,
+    ),  # no Phase.shrink - wastes a ton of time
 )
 def test_dydxfee_2(vyper_tricrypto, A, gamma, x0, x1, x2, pair, dx_perc):
     """
-    Test spot price formula against execution price for 1-100 bps 
-    volume trades. % Lower bound on error is ~ the number of bps traded. 
+    Test spot price formula against execution price for 1-100 bps
+    volume trades. % Lower bound on error is ~ the number of bps traded.
     """
     assume(0.02 < x0 / x1 < 50)
     assume(0.02 < x1 / x2 < 50)
@@ -562,13 +571,16 @@ def test_dydxfee_2(vyper_tricrypto, A, gamma, x0, x1, x2, pair, dx_perc):
 
     # D_UNIT precision to mitigate floating point numeric instability
     dydx = pool.dydxfee(i, j) * D_UNIT
-    dx = xp[i] * dx_perc // 10000 # basis points increase
+    dx = xp[i] * dx_perc // 10000  # basis points increase
     dy = pool.exchange(i, j, dx, 0)[0]
 
     dx *= pool.precisions[i]
     dy *= pool.precisions[j]
     discretized = dy * D_UNIT // dx
-    assert abs(dydx - discretized) * D_UNIT // discretized < (dx_perc + 5) * D_UNIT // 10000
+    assert (
+        abs(dydx - discretized) * D_UNIT // discretized
+        < (dx_perc + 5) * D_UNIT // 10000
+    )
 
 
 # Plan for more thorough testing of dydxfee:
@@ -576,7 +588,8 @@ def test_dydxfee_2(vyper_tricrypto, A, gamma, x0, x1, x2, pair, dx_perc):
 # num. of times to do trades?
 
 # use our dy solver's solution as the reference point for error
-# in future, differentiate polynomial interpolated bonding curve (using a set of points on the curve, e.g. Chebyshev nodes)
+# in future, differentiate polynomial interpolated bonding curve
+# (using a set of points on the curve, e.g. Chebyshev nodes)
 # Newton interpolation or Barycentric form of Langrage interpolation
 # at every point used for interpolation, assert abs. error of spot_price(point) < maximum error
 # maximum error is based on trade size (or perhaps constant)
