@@ -558,8 +558,9 @@ def test_dydxfee_2(vyper_tricrypto, A, gamma, x0, x1, x2, pair, dx_perc):
     #     10**4,
     #     10**15,
     # ]
-    #dx = dxs[i]
+    # dx = dxs[i]
 
+    # D_UNIT precision to mitigate floating point numeric instability
     dydx = pool.dydxfee(i, j) * D_UNIT
     dx = xp[i] * dx_perc // 10000 # basis points increase
     dy = pool.exchange(i, j, dx, 0)[0]
@@ -570,15 +571,12 @@ def test_dydxfee_2(vyper_tricrypto, A, gamma, x0, x1, x2, pair, dx_perc):
     assert abs(dydx - discretized) * D_UNIT // discretized < (dx_perc + 5) * D_UNIT // 10000
 
 
-# other params
+# Plan for more thorough testing of dydxfee:
+# other params:
 # num. of times to do trades?
 
-# use our solvers' solutions for D, y, etc. as the reference point for error
-# each time, record error from discretized derivative for now (simple abs difference for now)
-# in future, differentiate newton interpolated bonding curve (using a set of points on the curve) 
-# at start and end points and take abs. difference from spot formula
-# even more advanced: integrate abs(polynomial - spot) dx_i over [(before trade), (after trade)] or [(after trade), (before trade)]
-# (we are interested in error over the trade range, not just at a point)
-# at every point used for interpolation, assert abs. error of f(point) < maximum
-
-# just assert the same accuracy every time no matter what
+# use our dy solver's solution as the reference point for error
+# in future, differentiate polynomial interpolated bonding curve (using a set of points on the curve, e.g. Chebyshev nodes)
+# Newton interpolation or Barycentric form of Langrage interpolation
+# at every point used for interpolation, assert abs. error of spot_price(point) < maximum error
+# maximum error is based on trade size (or perhaps constant)
