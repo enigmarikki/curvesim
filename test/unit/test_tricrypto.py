@@ -569,7 +569,7 @@ def test_dydxfee_2(vyper_tricrypto, A, gamma, x0, x1, x2, pair, dx_perc):
     # ]
     # dx = dxs[i]
 
-    # D_UNIT precision to mitigate floating point numeric instability
+    # D_UNIT precision to mitigate floating point arithmetic error
     dydx = pool.dydxfee(i, j) * D_UNIT
     dx = xp[i] * dx_perc // 10000  # basis points increase
     dy = pool.exchange(i, j, dx, 0)[0]
