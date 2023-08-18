@@ -4,6 +4,7 @@ Unit tests for CurveCryptoPool for n = 3
 Tests are against the tricrypto-ng contract.
 """
 import os
+from time import time
 from itertools import permutations
 
 import boa
@@ -42,10 +43,16 @@ def pack_prices(prices):
 
 
 def get_math(tricrypto):
+    get_math_start = time()
+
     _base_dir = os.path.dirname(__file__)
     filepath = os.path.join(_base_dir, "../fixtures/curve/tricrypto_math.vy")
     _math = tricrypto.MATH()
     MATH = boa.load_partial(filepath).at(_math)
+
+    get_math_end = time()
+    test_point = f"get_math (boa.load_partial): {get_math_end - get_math_start} s"
+    print(test_point)
     return MATH
 
 
@@ -54,6 +61,8 @@ def initialize_pool(vyper_tricrypto):
     Initialize python-based pool from the state variables of the
     vyper-based implementation.
     """
+    initialize_pool_start = time()
+
     A = vyper_tricrypto.A()
     gamma = vyper_tricrypto.gamma()
     n_coins = 3
@@ -130,6 +139,10 @@ def initialize_pool(vyper_tricrypto):
     virtual_price = vyper_tricrypto.virtual_price()
     pool.virtual_price = virtual_price
 
+    initialize_pool_end = time()
+    test_point = f"initialize_pool: {initialize_pool_end - initialize_pool_start} s"
+    print(test_point)
+
     return pool
 
 
@@ -152,17 +165,28 @@ def update_cached_values(vyper_tricrypto):
     Calculates `D` and `virtual_price` from pool state and caches
     them in the appropriate storage.
     """
+    update_cached_start = time()
+
     A = vyper_tricrypto.A()
     gamma = vyper_tricrypto.gamma()
     xp = vyper_tricrypto.eval("self.xp()")
     xp = list(xp)  # boa doesn't like its own tuple wrapper
+
+    get_math_start = time()
     MATH = get_math(vyper_tricrypto)
+    get_math_end = time()
+    get_math_time = get_math_end - get_math_start
     D = MATH.newton_D(A, gamma, xp)  # pylint: disable=no-member
+
     vyper_tricrypto.eval(f"self.D={D}")
     total_supply = vyper_tricrypto.totalSupply()
     vyper_tricrypto.eval(
         f"self.virtual_price=10**18 * self.get_xcp({D}) / {total_supply}"
     )
+
+    update_cached_end = time()
+    test_point = f"update_cached_values - get_math: {(update_cached_end - update_cached_start) - get_math_time} s"
+    print(test_point)
 
 
 def override_initialization(vyper_tricrypto, A, gamma, balances):
@@ -171,6 +195,8 @@ def override_initialization(vyper_tricrypto, A, gamma, balances):
     attributes. End result emulates a balanced, newly
     created pool with 0 profit or loss.
     """
+    boa_init_start = time()
+
     # USDT, WBTC, WETH
     decimals = [6, 8, 18]
     precisions = [10 ** (18 - d) for d in decimals]
@@ -197,7 +223,12 @@ def override_initialization(vyper_tricrypto, A, gamma, balances):
         xp[i] * precisions[i] * price_scale[i - 1] // PRECISION
         for i in range(1, len(xp))
     ]
+
+    get_math_start = time()
     MATH = get_math(vyper_tricrypto)
+    get_math_end = time()
+    get_math_time = get_math_end - get_math_start
+
     D = MATH.newton_D(A, gamma, normalized)
     vyper_tricrypto.eval(f"self.D = {D}")
 
@@ -208,9 +239,74 @@ def override_initialization(vyper_tricrypto, A, gamma, balances):
     vyper_tricrypto.eval(f"self.totalSupply = {xcp}")
     vyper_tricrypto.eval("self.virtual_price = 10**18")
 
+    # WE MIGHT NOT NEED TO CALL update_cached_values() AT ALL HERE
+    update_cached_start = time()
     update_cached_values(vyper_tricrypto)
+    update_cached_end = time()
+    update_cached_time = update_cached_end - update_cached_start
+
+    boa_init_end = time()
+    test_point = f"override_initialization - get_math - update_cached_values: \
+        {(boa_init_end - boa_init_start) - get_math_time - update_cached_time} s"
+    print(test_point)
 
     return vyper_tricrypto
+
+
+def override_initialization_python(vyper_tricrypto, A, gamma, balances):
+    """
+    Helper that overrides the attributes of a CurveCryptoPool
+    initialized from the vyper_tricrypto fixture. 
+    End result emulates a balanced, newly
+    created pool with 0 profit or loss.
+    """
+    python_init_start = time()
+
+    initialize_pool_start = time()
+    pool = initialize_pool(vyper_tricrypto)
+    initialize_pool_end = time()
+    initialize_pool_time = initialize_pool_end - initialize_pool_start
+
+    # USDT, WBTC, WETH
+    decimals = [6, 8, 18]
+    precisions = [10 ** (18 - d) for d in decimals]
+
+    xp = balances
+
+    pool.A = A
+    pool.gamma = gamma
+
+    pool.balances = xp
+
+    # assume newly created pool with balanced reserves
+    price_scale = [
+        (xp[0] * precisions[0] * PRECISION) // (xp[i] * precisions[i])
+        for i in range(1, len(xp))
+    ]
+    pool.price_scale = price_scale
+    pool._price_oracle = price_scale
+    pool.last_prices = price_scale
+
+    normalized = [xp[0] * precisions[0]] + [
+        xp[i] * precisions[i] * price_scale[i - 1] // PRECISION
+        for i in range(1, len(xp))
+    ]
+    D = newton_D(A, gamma, normalized)
+    pool.D = D
+
+    # assume newly created pool with 0 profit or loss
+    pool.xcp_profit = 10**18
+    pool.xcp_profit_a = 10**18
+    xcp = pool._get_xcp(D)
+    pool.tokens = xcp
+    pool.virtual_price = 10**18
+
+    python_init_end = time()
+    test_point = f"override_initialization_python - initialize_pool: \
+        {(python_init_end - python_init_start) - initialize_pool_time} s"
+    print(test_point)
+
+    return pool
 
 
 D_UNIT = 10**18
@@ -522,8 +618,8 @@ def test_dydxfee(vyper_tricrypto):
     amplification_coefficient,
     gamma_coefficient,
     positive_balance,
-    positive_balance,
-    positive_balance,
+    st.floats(min_value=0.021, max_value=49.999),
+    st.floats(min_value=0.021, max_value=49.999),
     st.tuples(
         st.integers(min_value=0, max_value=2), st.integers(min_value=0, max_value=2)
     ).filter(lambda x: x[0] != x[1]),
@@ -534,23 +630,22 @@ def test_dydxfee(vyper_tricrypto):
         HealthCheck.function_scoped_fixture,
         HealthCheck.filter_too_much,
     ],
-    max_examples=1,
+    max_examples=25,
     deadline=None,
     phases=(
-        Phase.explicit,
         Phase.reuse,
         Phase.generate,
-        Phase.target,
-    ),  # no Phase.shrink - wastes a ton of time
+    ),  # no Phase.explicit, Phase.target, Phase.shrink - waste a ton of time
 )
-def test_dydxfee_2(vyper_tricrypto, A, gamma, x0, x1, x2, pair, dx_perc):
+def test_dydxfee_boa(vyper_tricrypto, A, gamma, x0, x1, x2, pair, dx_perc):
     """
     Test spot price formula against execution price for 1-100 bps
     volume trades. % Lower bound on error is ~ the number of bps traded.
+
+    Overrides vyper_tricrypto's init from Boa for timing purposes.
     """
-    assume(0.02 < x0 / x1 < 50)
-    assume(0.02 < x1 / x2 < 50)
-    assume(0.02 < x0 / x2 < 50)
+    x1 = int(x1 * D_UNIT * x0 // D_UNIT)
+    x2 = int(x2 * D_UNIT * x0 // D_UNIT)
 
     i, j = pair
 
@@ -559,7 +654,6 @@ def test_dydxfee_2(vyper_tricrypto, A, gamma, x0, x1, x2, pair, dx_perc):
     xp = [x * 10 ** decimals[i] // D_UNIT for i, x in enumerate([x0, x1, x2])]
 
     vyper_tricrypto = override_initialization(vyper_tricrypto, A, gamma, xp)
-
     pool = initialize_pool(vyper_tricrypto)
 
     # dxs = [
@@ -581,6 +675,75 @@ def test_dydxfee_2(vyper_tricrypto, A, gamma, x0, x1, x2, pair, dx_perc):
         abs(dydx - discretized) * D_UNIT // discretized
         < (dx_perc + 5) * D_UNIT // 10000
     )
+
+
+@given(
+    amplification_coefficient,
+    gamma_coefficient,
+    positive_balance,
+    st.floats(min_value=0.021, max_value=49.999),
+    st.floats(min_value=0.021, max_value=49.999),
+    st.tuples(
+        st.integers(min_value=0, max_value=2), st.integers(min_value=0, max_value=2)
+    ).filter(lambda x: x[0] != x[1]),
+    st.integers(min_value=1, max_value=100),
+)
+@settings(
+    suppress_health_check=[
+        HealthCheck.function_scoped_fixture,
+        HealthCheck.filter_too_much,
+    ],
+    max_examples=25,
+    deadline=None,
+    phases=(
+        Phase.reuse,
+        Phase.generate,
+    ),  # no Phase.explicit, Phase.target, Phase.shrink - waste a ton of time
+)
+def test_dydxfee_python(vyper_tricrypto, A, gamma, x0, x1, x2, pair, dx_perc):
+    """
+    Test spot price formula against execution price for 1-100 bps
+    volume trades. % Lower bound on error is ~ the number of bps traded.
+
+    Overrides vyper_tricrypto's init from Python for timing purposes.
+    """
+    x1 = int(x1 * D_UNIT * x0 // D_UNIT)
+    x2 = int(x2 * D_UNIT * x0 // D_UNIT)
+
+    i, j = pair
+
+    # USDT, WBTC, WETH
+    decimals = [6, 8, 18]
+    xp = [x * 10 ** decimals[i] // D_UNIT for i, x in enumerate([x0, x1, x2])]
+
+    pool = override_initialization_python(vyper_tricrypto, A, gamma, xp)
+
+    # dxs = [
+    #     10**6,
+    #     10**4,
+    #     10**15,
+    # ]
+    # dx = dxs[i]
+
+    # D_UNIT precision to mitigate floating point arithmetic error
+    dydx = pool.dydxfee(i, j) * D_UNIT
+    dx = xp[i] * dx_perc // 10000  # basis points increase
+    dy = pool.exchange(i, j, dx, 0)[0]
+
+    dx *= pool.precisions[i]
+    dy *= pool.precisions[j]
+    discretized = dy * D_UNIT // dx
+    assert (
+        abs(dydx - discretized) * D_UNIT // discretized
+        < (dx_perc + 5) * D_UNIT // 10000
+    )
+
+# things to time:
+# boa load of vyper fixture
+# overriding vyper fixture attributes
+# initialize_pool(vyper_tricrypto)
+
+# override_initialization_python(vyper_tricrypto)
 
 
 # Plan for more thorough testing of dydxfee:

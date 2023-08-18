@@ -1,6 +1,7 @@
 """Pool fixtures to test against vyper implementation.  Uses titanoboa."""
 # pylint: disable=redefined-outer-name
 import os
+from time import time
 
 import boa
 import pytest
@@ -276,6 +277,7 @@ def _vyper_tricrypto():
     _weth = FAKE_ADDRESS
     _math = boa.load(tricrypto_math_filepath)
 
+    tricrypto_start = time()
     tricrypto = boa.load(
         trycrypto_ng_filepath,
         _name,
@@ -290,6 +292,9 @@ def _vyper_tricrypto():
         packed_rebalancing_params,
         packed_prices,
     )
+    tricrypto_end = time()
+    test_point = f"boa.load (_vyper_tricrypto): {tricrypto_end - tricrypto_start} s"
+    print(test_point)
     """
     name :
     TricryptoUSDT
