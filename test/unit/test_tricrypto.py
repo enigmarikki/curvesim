@@ -185,7 +185,8 @@ def update_cached_values(vyper_tricrypto):
     )
 
     update_cached_end = time()
-    test_point = f"update_cached_values - get_math: {(update_cached_end - update_cached_start) - get_math_time} s"
+    test_point = f"update_cached_values - get_math: \
+        {(update_cached_end - update_cached_start) - get_math_time} s"
     print(test_point)
 
 
@@ -256,7 +257,7 @@ def override_initialization(vyper_tricrypto, A, gamma, balances):
 def override_initialization_python(vyper_tricrypto, A, gamma, balances):
     """
     Helper that overrides the attributes of a CurveCryptoPool
-    initialized from the vyper_tricrypto fixture. 
+    initialized from the vyper_tricrypto fixture.
     End result emulates a balanced, newly
     created pool with 0 profit or loss.
     """
@@ -723,5 +724,3 @@ def test_dydxfee_python(vyper_tricrypto, A, gamma, x0, x1, x2, pair, dx_perc):
         abs(dydx - discretized) * D_UNIT // discretized
         < (dx_perc + 5) * D_UNIT // 10000
     )
-
-
