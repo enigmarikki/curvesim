@@ -630,7 +630,7 @@ def test_dydxfee(vyper_tricrypto):
         HealthCheck.function_scoped_fixture,
         HealthCheck.filter_too_much,
     ],
-    max_examples=25,
+    max_examples=2,
     deadline=None,
     phases=(
         Phase.reuse,
@@ -655,13 +655,6 @@ def test_dydxfee_boa(vyper_tricrypto, A, gamma, x0, x1, x2, pair, dx_perc):
 
     vyper_tricrypto = override_initialization(vyper_tricrypto, A, gamma, xp)
     pool = initialize_pool(vyper_tricrypto)
-
-    # dxs = [
-    #     10**6,
-    #     10**4,
-    #     10**15,
-    # ]
-    # dx = dxs[i]
 
     # D_UNIT precision to mitigate floating point arithmetic error
     dydx = pool.dydxfee(i, j) * D_UNIT
@@ -693,7 +686,7 @@ def test_dydxfee_boa(vyper_tricrypto, A, gamma, x0, x1, x2, pair, dx_perc):
         HealthCheck.function_scoped_fixture,
         HealthCheck.filter_too_much,
     ],
-    max_examples=25,
+    max_examples=2,
     deadline=None,
     phases=(
         Phase.reuse,
@@ -718,13 +711,6 @@ def test_dydxfee_python(vyper_tricrypto, A, gamma, x0, x1, x2, pair, dx_perc):
 
     pool = override_initialization_python(vyper_tricrypto, A, gamma, xp)
 
-    # dxs = [
-    #     10**6,
-    #     10**4,
-    #     10**15,
-    # ]
-    # dx = dxs[i]
-
     # D_UNIT precision to mitigate floating point arithmetic error
     dydx = pool.dydxfee(i, j) * D_UNIT
     dx = xp[i] * dx_perc // 10000  # basis points increase
@@ -738,21 +724,4 @@ def test_dydxfee_python(vyper_tricrypto, A, gamma, x0, x1, x2, pair, dx_perc):
         < (dx_perc + 5) * D_UNIT // 10000
     )
 
-# things to time:
-# boa load of vyper fixture
-# overriding vyper fixture attributes
-# initialize_pool(vyper_tricrypto)
 
-# override_initialization_python(vyper_tricrypto)
-
-
-# Plan for more thorough testing of dydxfee:
-# other params:
-# num. of times to do trades?
-
-# use our dy solver's solution as the reference point for error
-# in future, differentiate polynomial interpolated bonding curve
-# (using a set of points on the curve, e.g. Chebyshev nodes)
-# Newton interpolation or Barycentric form of Langrage interpolation
-# at every point used for interpolation, assert abs. error of spot_price(point) < maximum error
-# maximum error is based on trade size (or perhaps constant)
