@@ -23,23 +23,8 @@ from curvesim.pool.cryptoswap.calcs.tricrypto_ng import (
     wad_exp,
 )
 
-
-def pack_A_gamma(A, gamma):
-    """
-    Need this to set A and gamma in the smart contract since they
-    are stored in packed format.
-    """
-    A_gamma = A << 128
-    A_gamma = A_gamma | gamma
-    return A_gamma
-
-
-def pack_3_uint64s(nums):
-    return (nums[0] << 128) | (nums[1] << 64) | nums[0]
-
-
-def pack_prices(prices):
-    return (prices[1] << 128) | prices[0]
+from .test_cryptopool import pack_A_gamma
+from test.fixtures.pool import pack_3_uint64s, pack_prices
 
 
 def get_math(tricrypto):
