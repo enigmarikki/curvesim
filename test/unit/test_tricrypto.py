@@ -24,7 +24,7 @@ from curvesim.pool.cryptoswap.calcs.tricrypto_ng import (
 )
 
 from .test_cryptopool import pack_A_gamma
-from test.fixtures.pool import pack_3_uint64s, pack_prices
+from test.fixtures.pool import pack_prices
 
 
 def get_math(tricrypto):
@@ -645,8 +645,13 @@ def test_dydxfee_boa(vyper_tricrypto, A, gamma, x0, x1, x2, pair, dx_perc):
     # D_UNIT precision to mitigate floating point arithmetic error
     dydx = pool.dydxfee(i, j) * D_UNIT
     # basis points increase in dollar amount
-    dx = (xp[i] * pool.precisions[i] * pool.price_scale[i - 1]) * dx_perc // 10000 \
-        // pool.price_scale[i - 1] // pool.precisions[i]
+    dx = (
+        (xp[i] * pool.precisions[i] * pool.price_scale[i - 1])
+        * dx_perc
+        // 10000
+        // pool.price_scale[i - 1]
+        // pool.precisions[i]
+    )
     dy = pool.exchange(i, j, dx, 0)[0]
 
     dx *= pool.precisions[i]
@@ -702,8 +707,13 @@ def test_dydxfee_python(vyper_tricrypto, A, gamma, x0, x1, x2, pair, dx_perc):
     # D_UNIT precision to mitigate floating point arithmetic error
     dydx = pool.dydxfee(i, j) * D_UNIT
     # basis points increase in dollar amount
-    dx = (xp[i] * pool.precisions[i] * pool.price_scale[i - 1]) * dx_perc // 10000 \
-        // pool.price_scale[i - 1] // pool.precisions[i]
+    dx = (
+        (xp[i] * pool.precisions[i] * pool.price_scale[i - 1])
+        * dx_perc
+        // 10000
+        // pool.price_scale[i - 1]
+        // pool.precisions[i]
+    )
     dy = pool.exchange(i, j, dx, 0)[0]
 
     dx *= pool.precisions[i]
