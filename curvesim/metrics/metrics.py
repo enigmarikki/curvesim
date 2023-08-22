@@ -522,14 +522,11 @@ class PriceDepth(PoolMetric):
     liquidity density, % change in reserves per % change in price.
     """
 
-    __slots__ = ["_factor"]
-
     @property
     @cache
     def pool_config(self):
-        ss_config = {
+        base = {
             "functions": {
-                "metrics": self.get_curve_LD,
                 "summary": {"liquidity_density": ["median", "min"]},
             },
             "plot": {
@@ -552,29 +549,62 @@ class PriceDepth(PoolMetric):
             },
         }
 
-        return dict.fromkeys(
-            [SimCurveMetaPool, SimCurvePool, SimCurveRaiPool, SimCurveCryptoPool],
-            ss_config,
-        )
+        functions = {
+            SimCurvePool: self.get_stableswap_LD,
+            SimCurveMetaPool: self.get_stableswap_LD,
+            SimCurveRaiPool: self.get_stableswap_LD,
+            SimCurveCryptoPool: self.get_cryptoswap_LD,
+        }
 
-    def __init__(self, pool, factor=10**8, **kwargs):
-        self._factor = factor
-        super().__init__(pool, **kwargs)
+        config = {}
+        for pool, fn in functions.items():
+            config[pool] = deepcopy(base)
+            config[pool]["functions"]["metrics"] = fn
 
-    def get_curve_LD(self, **kwargs):
+        return config
+
+    def get_stableswap_LD(self, **kwargs):
+        """
+        Computes liquidity density for each timestamp in an individual run.
+        Used for all Curve stableswap pools.
+        """
+        pool_state = kwargs["pool_state"]
+
+        def trade_size_function(coin_in):
+            x_per_dx = 10**8
+            return self._pool.asset_balances[coin_in] // x_per_dx
+
+        return self._get_curve_LD(pool_state, trade_size_function)
+
+    def get_cryptoswap_LD(self, **kwargs):
+        """
+        Computes liquidity density for each timestamp in an individual run.
+        Used for all Curve crpytoswap pools.
+        """
+        pool_state = kwargs["pool_state"]
+
+        def trade_size_function(coin_in):
+            return self._pool.get_min_trade_size(coin_in)
+
+        return self._get_curve_LD(pool_state, trade_size_function)
+
+    def _get_curve_LD(self, pool_state, trade_size_function):
         """
         Computes liquidity density for each timestamp in an individual run.
         Used for all Curve pools.
         """
-        pool_state = kwargs["pool_state"]
+        coin_pairs = get_pairs(self._pool.coin_names)  # only meta assets for metapools
 
-        coin_pairs = get_pairs(
-            self._pool.coin_names
-        )  # for metapool, uses only meta assets
-        LD = pool_state.apply(self._get_curve_LD_by_row, axis=1, coin_pairs=coin_pairs)
+        LD = pool_state.apply(
+            self._get_curve_LD_by_row,
+            axis=1,
+            coin_pairs=coin_pairs,
+            trade_size_function=trade_size_function,
+        )
+
         return DataFrame(LD, columns=["liquidity_density"])
 
-    def _get_curve_LD_by_row(self, pool_state_row, coin_pairs):
+    def _get_curve_LD_by_row(self, pool_state_row, coin_pairs, trade_size_function):
         """
         Computes liquidity density for a single row of data (i.e., a single timestamp).
         Used for all Curve pools.
@@ -583,39 +613,33 @@ class PriceDepth(PoolMetric):
 
         LD = []
         for pair in coin_pairs:
-            ld = self._compute_liquidity_density(*pair)
-            LD.append(ld)
+            amount_in = [trade_size_function(coin) for coin in pair]
+            LD_i = self._compute_liquidity_density(*pair, amount_in[0])
+            LD_j = self._compute_liquidity_density(*reversed(pair), amount_in[1])
+            LD += [LD_i, LD_j]
         return sum(LD) / len(LD)
 
-    def _compute_liquidity_density(self, coin_in, coin_out):
+    def _compute_liquidity_density(self, coin_in, coin_out, amount_in):
         """
         Computes liquidity density for a single pair of coins.
         """
-        factor = self._factor
         pool = self._pool
         post_trade_price = self._post_trade_price
+        x_per_dx = self._pool.asset_balances[coin_in] // amount_in
 
         price_pre = pool.price(coin_in, coin_out, use_fee=False)
-        price_post = post_trade_price(pool, coin_in, coin_out, factor)
-        LD1 = price_pre / ((price_pre - price_post) * factor)
+        price_post = post_trade_price(pool, coin_in, coin_out, amount_in)
+        LD = price_pre / ((price_pre - price_post) * x_per_dx)
 
-        price_pre = pool.price(coin_out, coin_in, use_fee=False)
-        # pylint: disable-next=arguments-out-of-order
-        price_post = post_trade_price(pool, coin_out, coin_in, factor)
-        LD2 = price_pre / ((price_pre - price_post) * factor)
-
-        return (LD1 + LD2) / 2
+        return LD
 
     @staticmethod
-    def _post_trade_price(pool, coin_in, coin_out, factor, use_fee=False):
+    def _post_trade_price(pool, coin_in, coin_out, amount_in, use_fee=False):
         """
         Computes price after executing a trade of size coin_in balances / factor.
         """
-
-        size = pool.asset_balances[coin_in] // factor
-
         with pool.use_snapshot_context():
-            pool.trade(coin_in, coin_out, size)
+            pool.trade(coin_in, coin_out, amount_in)
             price = pool.price(coin_in, coin_out, use_fee=use_fee)
 
         return price
