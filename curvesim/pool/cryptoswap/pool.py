@@ -201,7 +201,7 @@ class CurveCryptoPool(Pool):  # pylint: disable=too-many-instance-attributes
         else:
             self.tokens = xcp
 
-        self.virtual_price = 10**18 * xcp // tokens
+        self.virtual_price = 10**18 * xcp // self.tokens
 
     def _convert_D_to_balances(self, D):
         price_scale = self.price_scale
